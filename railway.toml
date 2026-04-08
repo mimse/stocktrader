@@ -1,0 +1,8 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+# Cron schedule is set in the Railway dashboard UI for the Cron Job service type.
+# This file handles the build configuration only.
+# Start command: npx tsx src/index.ts
+startCommand = "npx tsx src/index.ts"
