@@ -112,9 +112,12 @@ function makeClient(baseURL: string): AxiosInstance {
   const key = process.env.ALPACA_KEY;
   const secret = process.env.ALPACA_SECRET;
   if (!key || !secret) {
-    throw new Error(
-      "ALPACA_KEY and ALPACA_SECRET must be set — either in .env (local) or as Railway environment variables"
+    console.error(
+      "[alpaca] FATAL: ALPACA_KEY and ALPACA_SECRET are not set.\n" +
+      "  - Local: add them to your .env file\n" +
+      "  - Railway: add them in your service Variables tab, then redeploy"
     );
+    process.exit(1);
   }
   return axios.create({
     baseURL,

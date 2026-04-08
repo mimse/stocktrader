@@ -8,6 +8,14 @@ import { printDailySummary } from "./summary.js";
 
 const SYMBOL = process.env.WHEEL_SYMBOL ?? "TSLA";
 
+// Diagnostic: log which env vars are present (never log the values themselves)
+console.log(`[env] ALPACA_KEY=${process.env.ALPACA_KEY ? "SET" : "MISSING"}`);
+console.log(`[env] ALPACA_SECRET=${process.env.ALPACA_SECRET ? "SET" : "MISSING"}`);
+console.log(`[env] ALPACA_BASE_URL=${process.env.ALPACA_BASE_URL ?? "(default)"}`);
+console.log(`[env] ALPACA_DATA_URL=${process.env.ALPACA_DATA_URL ?? "(default)"}`);
+console.log(`[env] WHEEL_SYMBOL=${SYMBOL}`);
+console.log(`[env] STATE_DIR=${process.env.STATE_DIR ?? "(default: cwd)"}`);
+
 async function main(): Promise<void> {
   console.log(`\n[bot] ====== Wheel Bot run at ${timestampET()} ======`);
   console.log(`[bot] Symbol: ${SYMBOL}`);
