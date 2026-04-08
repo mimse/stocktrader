@@ -100,14 +100,21 @@ export interface LatestQuote {
 }
 
 // ---------------------------------------------------------------------------
-// Client
+// Client — lazy initialization so env vars are read at call time, not import time.
+// This is important on Railway where vars are in the environment (no .env file)
+// and other modules may import from here before dotenv.config() runs.
 // ---------------------------------------------------------------------------
+
+let _tradingClient: AxiosInstance | null = null;
+let _dataClient: AxiosInstance | null = null;
 
 function makeClient(baseURL: string): AxiosInstance {
   const key = process.env.ALPACA_KEY;
   const secret = process.env.ALPACA_SECRET;
   if (!key || !secret) {
-    throw new Error("ALPACA_KEY and ALPACA_SECRET must be set in .env");
+    throw new Error(
+      "ALPACA_KEY and ALPACA_SECRET must be set — either in .env (local) or as Railway environment variables"
+    );
   }
   return axios.create({
     baseURL,
@@ -120,20 +127,30 @@ function makeClient(baseURL: string): AxiosInstance {
   });
 }
 
-const tradingClient = makeClient(
-  process.env.ALPACA_BASE_URL ?? "https://paper-api.alpaca.markets/v2"
-);
-// Data API uses different path prefixes per resource type, so we use the root host
-const dataClient = makeClient(
-  process.env.ALPACA_DATA_URL ?? "https://data.alpaca.markets"
-);
+function tradingClient(): AxiosInstance {
+  if (!_tradingClient) {
+    _tradingClient = makeClient(
+      process.env.ALPACA_BASE_URL ?? "https://paper-api.alpaca.markets/v2"
+    );
+  }
+  return _tradingClient;
+}
+
+function dataClient(): AxiosInstance {
+  if (!_dataClient) {
+    _dataClient = makeClient(
+      process.env.ALPACA_DATA_URL ?? "https://data.alpaca.markets"
+    );
+  }
+  return _dataClient;
+}
 
 // ---------------------------------------------------------------------------
 // Account
 // ---------------------------------------------------------------------------
 
 export async function getAccount(): Promise<AlpacaAccount> {
-  const res = await tradingClient.get<AlpacaAccount>("/account");
+  const res = await tradingClient().get<AlpacaAccount>("/account");
   return res.data;
 }
 
@@ -142,13 +159,13 @@ export async function getAccount(): Promise<AlpacaAccount> {
 // ---------------------------------------------------------------------------
 
 export async function getPositions(): Promise<AlpacaPosition[]> {
-  const res = await tradingClient.get<AlpacaPosition[]>("/positions");
+  const res = await tradingClient().get<AlpacaPosition[]>("/positions");
   return res.data;
 }
 
 export async function getPosition(symbol: string): Promise<AlpacaPosition | null> {
   try {
-    const res = await tradingClient.get<AlpacaPosition>(`/positions/${encodeURIComponent(symbol)}`);
+    const res = await tradingClient().get<AlpacaPosition>(`/positions/${encodeURIComponent(symbol)}`);
     return res.data;
   } catch (err: unknown) {
     if (axios.isAxiosError(err) && err.response?.status === 404) return null;
@@ -158,7 +175,7 @@ export async function getPosition(symbol: string): Promise<AlpacaPosition | null
 
 // Close an entire position (buy-to-close or sell-to-close)
 export async function closePosition(symbol: string): Promise<AlpacaOrder> {
-  const res = await tradingClient.delete<AlpacaOrder>(`/positions/${encodeURIComponent(symbol)}`);
+  const res = await tradingClient().delete<AlpacaOrder>(`/positions/${encodeURIComponent(symbol)}`);
   return res.data;
 }
 
@@ -167,19 +184,19 @@ export async function closePosition(symbol: string): Promise<AlpacaOrder> {
 // ---------------------------------------------------------------------------
 
 export async function getOpenOrders(): Promise<AlpacaOrder[]> {
-  const res = await tradingClient.get<AlpacaOrder[]>("/orders", {
+  const res = await tradingClient().get<AlpacaOrder[]>("/orders", {
     params: { status: "open", limit: 100 },
   });
   return res.data;
 }
 
 export async function getOrder(orderId: string): Promise<AlpacaOrder> {
-  const res = await tradingClient.get<AlpacaOrder>(`/orders/${orderId}`);
+  const res = await tradingClient().get<AlpacaOrder>(`/orders/${orderId}`);
   return res.data;
 }
 
 export async function cancelOrder(orderId: string): Promise<void> {
-  await tradingClient.delete(`/orders/${orderId}`);
+  await tradingClient().delete(`/orders/${orderId}`);
 }
 
 export interface PlaceOrderParams {
@@ -202,7 +219,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<AlpacaOrder>
   if (params.limit_price !== undefined) {
     body["limit_price"] = params.limit_price.toFixed(2);
   }
-  const res = await tradingClient.post<AlpacaOrder>("/orders", body);
+  const res = await tradingClient().post<AlpacaOrder>("/orders", body);
   return res.data;
 }
 
@@ -245,7 +262,7 @@ export async function getOptionContracts(params: {
   if (params.strike_price_gte !== undefined) query["strike_price_gte"] = params.strike_price_gte;
   if (params.strike_price_lte !== undefined) query["strike_price_lte"] = params.strike_price_lte;
 
-  const res = await tradingClient.get<{ option_contracts: AlpacaOptionContract[] }>(
+  const res = await tradingClient().get<{ option_contracts: AlpacaOptionContract[] }>(
     "/options/contracts",
     { params: query }
   );
@@ -257,7 +274,7 @@ export async function getOptionContracts(params: {
 // ---------------------------------------------------------------------------
 
 export async function getStockLatestPrice(symbol: string): Promise<number> {
-  const res = await dataClient.get<{
+  const res = await dataClient().get<{
     quotes: Record<string, { ap: number; bp: number }>;
   }>(`/v2/stocks/quotes/latest`, {
     params: { symbols: symbol, feed: "iex" },
@@ -276,7 +293,7 @@ export async function getOptionSnapshot(
   contractSymbol: string
 ): Promise<AlpacaOptionSnapshot | null> {
   try {
-    const res = await dataClient.get<{
+    const res = await dataClient().get<{
       snapshots: Record<string, AlpacaOptionSnapshot>;
     }>(`/v1beta1/options/snapshots`, {
       params: { symbols: contractSymbol, feed: "indicative" },
@@ -317,7 +334,7 @@ export async function getRecentActivities(
       params["after"] = since.toISOString();
     }
     try {
-      const res = await tradingClient.get<AlpacaActivity[]>(
+      const res = await tradingClient().get<AlpacaActivity[]>(
         `/account/activities/${type}`,
         { params }
       );
